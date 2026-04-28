@@ -82,17 +82,19 @@ $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $totalTrans = $pdo->query("SELECT COUNT(*) FROM transactions")->fetchColumn();
 $totalFees = $pdo->query("SELECT SUM(fee_amount) FROM transactions")->fetchColumn() ?: 0;
 
-// جلب قائمة المستخدمين
-$users = $pdo->query("SELECT * FROM users WHERE id != $adminId ORDER BY id DESC")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
     <title>QPay Admin | لوحة الإدارة</title>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
 </head>
 <body>
     <div class="app-container">
@@ -215,5 +217,31 @@ $users = $pdo->query("SELECT * FROM users WHERE id != $adminId ORDER BY id DESC"
             </main>
         </div>
     </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+        }
+        $(function () {
+            $('#usersTable').DataTable({
+                processing: true,
+                serverSide: true,
+                pageLength: 10,
+                ajax: 'admin_users_data.php',
+                language: {
+                    search: 'بحث:',
+                    processing: 'جاري التحميل...',
+                    paginate: { previous: 'السابق', next: 'التالي' },
+                    lengthMenu: 'عرض _MENU_'
+                },
+                columnDefs: [
+                    { targets: -1, orderable: false, searchable: false }
+                ]
+            });
+        });
+    </script>
+
 </body>
 </html>

@@ -111,3 +111,16 @@ body { background: var(--bg-dark); color: #fff; min-height: 100vh; overflow-x: h
 .warning-banner { background: var(--ios-red); padding: 18px; text-align: center; font-weight: 700; position: sticky; top: 0; z-index: 2000; }
 .chip-list { display: flex; gap: 12px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
 .recipient-chip { padding: 12px 20px; background: #2c2c2e; border-radius: 22px; border: 1px solid var(--border); white-space: nowrap; cursor: pointer; font-weight: 600; }
+
+
+/* iOS visual language extras */
+.ios-list, .glass-card { backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+.ios-inset-group { border-radius: 22px; margin: 0 10px 16px; overflow: hidden; }
+
+/* DataTables skin */
+table.dataTable { border-collapse: collapse !important; }
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select { background: #2c2c2e; color: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; }
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate { color: #d1d1d6 !important; }
+.dt-actions { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -25,7 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
     <title>QPay | تسجيل الدخول</title>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -47,10 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <form method="POST">
                 <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 8px; display: block; text-align: right;">رقم الهاتف</label>
-                <input type="text" name="phone" class="form-input" required placeholder="05XXXXXXXX">
+                <input type="text" name="phone" class="form-input" autocomplete="off" required placeholder="05XXXXXXXX">
                 
                 <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 8px; display: block; text-align: right;">كلمة المرور</label>
-                <input type="password" name="password" class="form-input" required placeholder="••••••••">
+                <input type="password" name="password" class="form-input" autocomplete="current-password" required placeholder="••••••••">
 
                 <button type="submit" class="btn btn-primary" style="margin-top: 10px; padding: 16px;">تسجيل الدخول</button>
             </form>
@@ -60,5 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <p style="color: var(--ios-gray); font-size: 0.9rem;">ليس لديك حساب؟ <a href="register.php" style="color: var(--ios-blue); text-decoration: none; font-weight: 700;">إنشاء حساب جديد</a></p>
         </div>
     </div>
+<script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')); }</script>
 </body>
 </html>
