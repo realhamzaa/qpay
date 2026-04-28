@@ -5,6 +5,9 @@ if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) { header("Location: 
 
 $adminId = $_SESSION['user_id'];
 
+$defaultCities = ['غزة','النصيرات','دير البلح','خانيونس','رفح','جباليا','بيت لاهيا','بيت حانون','الزوايدة','البريج','المغازي'];
+$defaultCurrencies = ['ILS','USD','JOD'];
+
 // معالجة العمليات الإدارية
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['action'])) {
@@ -22,24 +25,76 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             notifyUser($targetId, "تم إعادة تعيين رمز PIN الخاص بك إلى 1234 من قبل الإدارة.", 'warning');
         }
     }
+
+
+    if (isset($_POST['entity']) && $_POST['entity'] === 'city') {
+        $citiesRaw = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'available_cities'");
+        $citiesRaw->execute();
+        $cities = json_decode($citiesRaw->fetchColumn() ?: '[]', true);
+        if (!is_array($cities) || empty($cities)) { $cities = $defaultCities; }
+
+        if ($_POST['crud'] === 'create' && !empty($_POST['city_name'])) {
+            $city = trim($_POST['city_name']);
+            if (!in_array($city, $cities)) { $cities[] = $city; }
+        } elseif ($_POST['crud'] === 'update' && isset($_POST['old_city'], $_POST['city_name'])) {
+            foreach ($cities as &$c) { if ($c === $_POST['old_city']) { $c = trim($_POST['city_name']); } }
+        } elseif ($_POST['crud'] === 'delete' && !empty($_POST['old_city'])) {
+            $cities = array_values(array_filter($cities, fn($c) => $c !== $_POST['old_city']));
+        }
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('available_cities', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")->execute([json_encode(array_values(array_unique($cities)), JSON_UNESCAPED_UNICODE)]);
+    }
+
+    if (isset($_POST['entity']) && $_POST['entity'] === 'currency') {
+        $currRaw = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'available_currencies'");
+        $currRaw->execute();
+        $currencies = json_decode($currRaw->fetchColumn() ?: '[]', true);
+        if (!is_array($currencies) || empty($currencies)) { $currencies = $defaultCurrencies; }
+
+        if ($_POST['crud'] === 'create' && !empty($_POST['currency_code'])) {
+            $code = strtoupper(trim($_POST['currency_code']));
+            if (!in_array($code, $currencies)) { $currencies[] = $code; }
+        } elseif ($_POST['crud'] === 'update' && isset($_POST['old_currency'], $_POST['currency_code'])) {
+            foreach ($currencies as &$c) { if ($c === $_POST['old_currency']) { $c = strtoupper(trim($_POST['currency_code'])); } }
+        } elseif ($_POST['crud'] === 'delete' && !empty($_POST['old_currency'])) {
+            $currencies = array_values(array_filter($currencies, fn($c) => $c !== $_POST['old_currency']));
+        }
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('available_currencies', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")->execute([json_encode(array_values(array_unique($currencies)), JSON_UNESCAPED_UNICODE)]);
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_user' && !empty($_POST['user_id'])) {
+        $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$_POST['user_id']]);
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && !empty($_POST['user_id'])) {
+        $pdo->prepare("UPDATE users SET is_admin = IF(is_admin = 1, 0, 1) WHERE id = ?")->execute([$_POST['user_id']]);
+    }
 }
+
+$citiesSetting = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'available_cities'")->fetchColumn();
+$currenciesSetting = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'available_currencies'")->fetchColumn();
+$availableCities = json_decode($citiesSetting ?: '[]', true);
+$availableCurrencies = json_decode($currenciesSetting ?: '[]', true);
+if (!is_array($availableCities) || empty($availableCities)) { $availableCities = $defaultCities; }
+if (!is_array($availableCurrencies) || empty($availableCurrencies)) { $availableCurrencies = $defaultCurrencies; }
 
 // جلب الإحصائيات
 $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $totalTrans = $pdo->query("SELECT COUNT(*) FROM transactions")->fetchColumn();
 $totalFees = $pdo->query("SELECT SUM(fee_amount) FROM transactions")->fetchColumn() ?: 0;
 
-// جلب قائمة المستخدمين
-$users = $pdo->query("SELECT * FROM users WHERE id != $adminId ORDER BY id DESC")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
     <title>QPay Admin | لوحة الإدارة</title>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
 </head>
 <body>
     <div class="app-container">
@@ -77,43 +132,88 @@ $users = $pdo->query("SELECT * FROM users WHERE id != $adminId ORDER BY id DESC"
                 </div>
 
                 <!-- Users Management -->
-                <h3 class="ios-list-header">إدارة الحسابات</h3>
-                <div class="ios-list">
-                    <?php foreach ($users as $u): ?>
-                        <div class="ios-item" style="flex-wrap: wrap; gap: 20px;">
-                            <div class="ios-icon" style="background: rgba(255,255,255,0.05); font-size: 1.2rem;"><?php echo mb_substr($u['full_name_ar'], 0, 1, 'utf-8'); ?></div>
-                            <div class="ios-label" style="min-width: 200px;">
-                                <span class="ios-title"><?php echo $u['full_name_ar']; ?> <?php if($u['is_frozen']) echo "<span style='color:var(--ios-red); font-size:0.7rem;'>(مجمد)</span>"; ?></span>
-                                <span class="ios-subtitle"><?php echo $u['phone']; ?> | الليمت: <?php echo number_format($u['daily_limit'], 0); ?> ₪</span>
-                            </div>
-                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <form method="POST" style="display: inline-flex; gap: 5px;">
-                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
-                                    <input type="number" name="limit" value="<?php echo $u['daily_limit']; ?>" style="width: 80px; padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff;">
-                                    <button type="submit" name="action" value="set_limit" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-blue);">تعديل</button>
-                                </form>
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
-                                    <?php if ($u['is_frozen']): ?>
-                                        <button type="submit" name="action" value="unfreeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-green);">فك التجميد</button>
-                                    <?php else: ?>
-                                        <button type="submit" name="action" value="freeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-red);">تجميد</button>
-                                    <?php endif; ?>
-                                </form>
-                                <form method="POST" style="display: inline-flex; gap: 5px;">
-                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
-                                    <input type="text" name="warning_msg" placeholder="نص التحذير..." style="padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff; width: 150px;">
-                                    <button type="submit" name="action" value="send_warning" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #5856D6;"><i class="fa fa-triangle-exclamation"></i></button>
-                                <form method="POST" style="display: inline-flex; gap: 5px;" onsubmit="return confirm('هل أنت متأكد من إعادة تعيين PIN لـ 1234؟')">
-                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
-                                    <button type="submit" name="action" value="reset_pin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #FF9500;"><i class="fa fa-key"></i></button>
-                                </form>
-                            </div>
-                        </div>
-<?php endforeach; ?>
+                <h3 class="ios-list-header">إدارة الحسابات (DataTables + Server-side)</h3>
+                <div class="glass-card" style="overflow:auto;">
+                    <table id="usersTable" class="display" style="width:100%; color:#fff;">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>الاسم</th>
+                                <th>الهاتف</th>
+                                <th>الحد اليومي</th>
+                                <th>الحالة</th>
+                                <th>الصلاحية</th>
+                                <th>التسجيل</th>
+                                <th>إجراءات</th>
+                            </tr>
+                        </thead>
+                    </table>
                 </div>
+
+                <h3 class="ios-list-header" style="margin-top:2rem;">إدارة المدن (CRUD)</h3>
+                <div class="glass-card">
+                    <?php foreach ($availableCities as $city): ?>
+                    <form method="POST" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="hidden" name="old_city" value="<?php echo htmlspecialchars($city); ?>">
+                        <input type="text" name="city_name" value="<?php echo htmlspecialchars($city); ?>" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="update" class="btn" style="width:auto; background:#0A84FF; padding:10px 14px;">تعديل</button>
+                        <button type="submit" name="crud" value="delete" class="btn" style="width:auto; background:#FF3B30; padding:10px 14px;">حذف</button>
+                    </form>
+                    <?php endforeach; ?>
+                    <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="text" name="city_name" placeholder="إضافة مدينة جديدة" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="create" class="btn" style="width:auto; background:#34C759; padding:10px 14px;">إضافة</button>
+                    </form>
+                </div>
+
+                <h3 class="ios-list-header" style="margin-top:2rem;">إدارة العملات (CRUD)</h3>
+                <div class="glass-card">
+                    <?php foreach ($availableCurrencies as $currency): ?>
+                    <form method="POST" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="hidden" name="entity" value="currency">
+                        <input type="hidden" name="old_currency" value="<?php echo htmlspecialchars($currency); ?>">
+                        <input type="text" name="currency_code" value="<?php echo htmlspecialchars($currency); ?>" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="update" class="btn" style="width:auto; background:#0A84FF; padding:10px 14px;">تعديل</button>
+                        <button type="submit" name="crud" value="delete" class="btn" style="width:auto; background:#FF3B30; padding:10px 14px;">حذف</button>
+                    </form>
+                    <?php endforeach; ?>
+                    <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                        <input type="hidden" name="entity" value="currency">
+                        <input type="text" name="currency_code" placeholder="إضافة عملة جديدة" class="form-input" style="margin-bottom:0; flex:1; min-width:180px; text-transform:uppercase;">
+                        <button type="submit" name="crud" value="create" class="btn" style="width:auto; background:#34C759; padding:10px 14px;">إضافة</button>
+                    </form>
+                </div>
+
             </main>
         </div>
     </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+        }
+        $(function () {
+            $('#usersTable').DataTable({
+                processing: true,
+                serverSide: true,
+                pageLength: 10,
+                ajax: 'admin_users_data.php',
+                language: {
+                    search: 'بحث:',
+                    processing: 'جاري التحميل...',
+                    paginate: { previous: 'السابق', next: 'التالي' },
+                    lengthMenu: 'عرض _MENU_'
+                },
+                columnDefs: [
+                    { targets: -1, orderable: false, searchable: false }
+                ]
+            });
+        });
+    </script>
+
 </body>
 </html>
