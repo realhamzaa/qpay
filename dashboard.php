@@ -40,7 +40,12 @@ $transStmt->execute([$userId, $userId]); $transactions = $transStmt->fetchAll();
 $comm_stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'commission_step_fee'");
 $fee_val = (float)($comm_stmt->fetchColumn() ?: 0.5);
 
-$success_data = null; $error = ''; $pin_msg = '';
+function currency_symbol($currency) {
+    $map = ['ILS' => '₪', 'USD' => '$', 'JOD' => 'JD'];
+    return $map[$currency] ?? $currency;
+}
+
+$success_data = null; $error = ''; $pin_msg = ''; $password_msg = ''; $otp_msg = '';
 
 // معالجة تغيير PIN
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_pin'])) {
@@ -49,6 +54,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_pin'])) {
     elseif (strlen($new) !== 4 || !ctype_digit($new)) { $pin_msg = ['type'=>'error', 'text'=>'❌ الرمز الجديد يجب أن يكون 4 أرقام']; }
     elseif ($new !== $conf) { $pin_msg = ['type'=>'error', 'text'=>'❌ الرمزين غير متطابقين']; }
     else { $pdo->prepare("UPDATE users SET pin_hash = ? WHERE id = ?")->execute([password_hash($new, PASSWORD_DEFAULT), $userId]); $pin_msg = ['type'=>'success', 'text'=>'✅ تم تغيير رمز PIN بنجاح']; }
+}
+
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password_old'])) {
+    $oldPass = $_POST['old_password'] ?? '';
+    $newPass = $_POST['new_password'] ?? '';
+    $confirmPass = $_POST['confirm_new_password'] ?? '';
+
+    if (!password_verify($oldPass, $user['password_hash'])) { $password_msg = ['type'=>'error', 'text'=>'❌ كلمة المرور الحالية غير صحيحة']; }
+    elseif (strlen($newPass) < 6) { $password_msg = ['type'=>'error', 'text'=>'❌ كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل']; }
+    elseif ($newPass !== $confirmPass) { $password_msg = ['type'=>'error', 'text'=>'❌ كلمتا المرور غير متطابقتين']; }
+    else {
+        $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([password_hash($newPass, PASSWORD_DEFAULT), $userId]);
+        $password_msg = ['type'=>'success', 'text'=>'✅ تم تغيير كلمة المرور بنجاح عبر التحقق بكلمة المرور القديمة'];
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['request_password_otp'])) {
+    $otpCode = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+    $pdo->prepare("INSERT INTO otp_codes (phone, code, expires_at, is_used) VALUES (?, ?, ?, 0)")->execute([$user['phone'], $otpCode, $expiresAt]);
+    notifyUser($userId, "رمز OTP لتغيير كلمة المرور: $otpCode (صالح لمدة 10 دقائق)", 'warning');
+    $otp_msg = ['type'=>'success', 'text'=>'✅ تم إرسال رمز OTP إلى هاتفك المسجل'];
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password_otp'])) {
+    $otpCode = trim($_POST['otp_code'] ?? '');
+    $newPass = $_POST['otp_new_password'] ?? '';
+    $confirmPass = $_POST['otp_confirm_password'] ?? '';
+
+    $otpStmt = $pdo->prepare("SELECT * FROM otp_codes WHERE phone = ? AND code = ? AND is_used = 0 AND expires_at >= NOW() ORDER BY id DESC LIMIT 1");
+    $otpStmt->execute([$user['phone'], $otpCode]);
+    $otpRow = $otpStmt->fetch();
+
+    if (!$otpRow) { $otp_msg = ['type'=>'error', 'text'=>'❌ رمز OTP غير صحيح أو منتهي الصلاحية']; }
+    elseif (strlen($newPass) < 6) { $otp_msg = ['type'=>'error', 'text'=>'❌ كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل']; }
+    elseif ($newPass !== $confirmPass) { $otp_msg = ['type'=>'error', 'text'=>'❌ كلمتا المرور غير متطابقتين']; }
+    else {
+        $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([password_hash($newPass, PASSWORD_DEFAULT), $userId]);
+        $pdo->prepare("UPDATE otp_codes SET is_used = 1 WHERE id = ?")->execute([$otpRow['id']]);
+        $otp_msg = ['type'=>'success', 'text'=>'✅ تم تغيير كلمة المرور بنجاح عبر OTP'];
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
@@ -65,6 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -75,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
         </div>
         <?php endif; ?>
 
+        <div class="app-logo-fixed desktop-logo-fixed"><span class="app-logo-text">QPAY</span></div>
         <div class="main-wrapper">
             <nav class="desktop-nav desktop-only">
                 <div class="logo-box" style="margin-bottom: 4rem; text-align: center;"><div class="logo-circle" style="margin: 0 auto 10px;">Q</div><span style="font-size: 1.6rem; font-weight: 800;">QPAY</span></div>
@@ -87,13 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
 
             <div class="main-content">
                 <!-- 📱 Mobile Minimal Header -->
-                <div class="mobile-only" style="margin-bottom: 2.5rem; display: flex; justify-content: flex-start; padding: 0 5px;">
-                    <span style="font-size: 1.4rem; font-weight: 800; letter-spacing: 2px; color: #fff;">QPAY</span>
+                <div class="mobile-only app-logo-fixed">
+                    <span class="app-logo-text">QPAY</span>
                 </div>
 
                 <?php if ($tab == 'wallet'): ?>
                     <h1 style="font-weight: 800; font-size: 2rem; margin-bottom: 2rem; text-align: right; width: 100%;">أهلاً، <?php echo explode(' ', $user['full_name_ar'])[0]; ?></h1>
-                    <div class="segmented-control"><div class="segment-indicator" id="indicator"></div><button class="segment-btn active" onclick="switchWallet(0, 'ILS')">ILS</button><button class="segment-btn" onclick="switchWallet(1, 'USD')">USD</button><button class="segment-btn" onclick="switchWallet(2, 'JOD')">JOD</button></div>
+                    <div class="segmented-control currency-strip"><div class="segment-indicator" id="indicator"></div><button class="segment-btn active" onclick="switchWallet(0, 'ILS')">ILS</button><button class="segment-btn" onclick="switchWallet(1, 'USD')">USD</button><button class="segment-btn" onclick="switchWallet(2, 'JOD')">JOD</button></div>
                     <div class="wallet-card" id="card-bg" style="background: linear-gradient(135deg, #007AFF, #00C7FF);">
                         <span id="curr-label" style="font-weight: 700; opacity: 0.8; letter-spacing: 1px; font-size: 0.9rem;">ILS WALLET</span>
                         <div class="wallet-balance">
@@ -112,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                             ])); ?>)" style="cursor: pointer;">
                                 <div class="ios-icon" style="background: <?php echo $isSender?'rgba(255,59,48,0.1)':'rgba(48, 209, 88, 0.1)'; ?>;"><i class="fa <?php echo $isSender?'fa-arrow-up':'fa-arrow-down'; ?>" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>;"></i></div>
                                 <div class="ios-label"><span class="ios-title"><?php echo $isSender ? 'إلى ' . $t['receiver_name'] : 'من ' . $t['sender_name']; ?></span><span class="ios-subtitle"><?php echo time_elapsed_string($t['created_at']); ?></span></div>
-                                <div class="ios-value" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>; font-weight: 700;"><?php echo ($isSender?'-':'+') . number_format($t['amount'], 1); ?></div>
+                                <div class="ios-value" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>; font-weight: 700;"><?php echo ($isSender?'-':'+') . currency_symbol($t['sender_curr'] ?? $t['receiver_curr']) . ' ' . number_format($t['amount'], 1); ?></div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -142,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                     </div>
 
                 <?php elseif ($tab == 'history'): ?>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"><h1 style="font-weight: 800;">السجل المالي</h1><a href="export.php" class="btn" style="background: rgba(255,255,255,0.08); font-size: 0.85rem;"><i class="fa fa-file-csv" style="margin-left: 5px;"></i> تصدير CSV</a></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"><h1 style="font-weight: 800;">السجل المالي</h1><button type="button" onclick="exportHistoryPdf()" class="btn history-export-btn"><i class="fa fa-file-pdf" style="margin-left: 5px;"></i> تصدير PDF</button></div>
                     <div class="ios-list">
                         <?php foreach ($transactions as $t): $isSender = ($t['sender_phone'] == $user['phone']); ?>
                             <div class="ios-item" onclick="viewTransaction(<?php echo htmlspecialchars(json_encode([
@@ -153,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                             ])); ?>)" style="cursor: pointer;">
                                 <div class="ios-icon" style="background: <?php echo $isSender?'rgba(255,59,48,0.1)':'rgba(48, 209, 88, 0.1)'; ?>;"><i class="fa <?php echo $isSender?'fa-arrow-up':'fa-arrow-down'; ?>" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>;"></i></div>
                                 <div class="ios-label"><span class="ios-title"><?php echo $isSender ? 'إلى ' . $t['receiver_name'] : 'من ' . $t['sender_name']; ?></span><span class="ios-subtitle"><?php echo time_elapsed_string($t['created_at']); ?></span></div>
-                                <div class="ios-value" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>; font-weight: 700; font-size: 1.1rem;"><?php echo ($isSender?'-':'+') . number_format($t['amount'], 1); ?></div>
+                                <div class="ios-value" style="color: <?php echo $isSender?'var(--ios-red)':'var(--ios-green)'; ?>; font-weight: 700; font-size: 1.1rem;"><?php echo ($isSender?'-':'+') . currency_symbol($t['sender_curr'] ?? $t['receiver_curr']) . ' ' . number_format($t['amount'], 1); ?></div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -213,11 +263,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                                 <div class="ios-label"><span class="ios-title">ربط الواتساب</span><span class="ios-subtitle"><?php echo $user['whatsapp_phone'] ?: 'غير مربوط حالياً'; ?></span></div>
                                 <i class="fa fa-chevron-left ios-arrow"></i>
                             </a>
-                            <a href="export.php" class="ios-item">
-                                <div class="ios-icon" style="background: #32ADE6;"><i class="fa fa-file-csv"></i></div>
-                                <div class="ios-label"><span class="ios-title">تصدير البيانات CSV</span><span class="ios-subtitle">تحميل سجل معاملاتك بالكامل</span></div>
+                            <a href="javascript:void(0)" onclick="document.getElementById('passwordOldModal').style.display='flex'" class="ios-item">
+                                <div class="ios-icon" style="background: #FF9500;"><i class="fa fa-lock"></i></div>
+                                <div class="ios-label"><span class="ios-title">تغيير كلمة المرور (بالقديمة)</span><span class="ios-subtitle">مسار تحقق باستخدام كلمة المرور الحالية</span></div>
                                 <i class="fa fa-chevron-left ios-arrow"></i>
                             </a>
+                            <a href="javascript:void(0)" onclick="document.getElementById('passwordOtpModal').style.display='flex'" class="ios-item">
+                                <div class="ios-icon" style="background: #34C759;"><i class="fa fa-mobile-alt"></i></div>
+                                <div class="ios-label"><span class="ios-title">تغيير كلمة المرور (OTP)</span><span class="ios-subtitle">مسار منفصل عبر رمز للهاتف</span></div>
+                                <i class="fa fa-chevron-left ios-arrow"></i>
+                            </a>
+                            <?php if (!empty($user['is_admin'])): ?>
+                            <a href="admin_dashboard.php" class="ios-item">
+                                <div class="ios-icon" style="background: #FF3B30;"><i class="fa fa-user-shield"></i></div>
+                                <div class="ios-label"><span class="ios-title">دخول لوحة الإدارة</span><span class="ios-subtitle">وصول سريع لحساب الآدمن</span></div>
+                                <i class="fa fa-chevron-left ios-arrow"></i>
+                            </a>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -267,6 +329,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
             <form method="POST" action="?tab=settings"><input type="password" name="old_pin" class="form-input" placeholder="الرمز الحالي" required><input type="password" name="new_pin" class="form-input" placeholder="الرمز الجديد" maxlength="4" required><input type="password" name="confirm_pin" class="form-input" placeholder="تأكيد الجديد" maxlength="4" required><div style="display: flex; gap: 12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex: 1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_pin" class="btn btn-primary" style="flex: 1;">حفظ</button></div></form>
         </div>
     </div>
+
+    <div id="passwordOldModal" class="confirm-modal" <?php if($password_msg) echo 'style="display:flex"'; ?>>
+        <div class="confirm-card fade-in">
+            <h3 style="margin-bottom: 1rem;">تغيير كلمة المرور - عبر كلمة المرور الحالية</h3>
+            <?php if ($password_msg): ?><div style="padding: 12px; border-radius: 12px; margin-bottom: 15px; font-weight: 600; font-size: 0.9rem; background: <?php echo $password_msg['type']==='success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,59,48,0.15)'; ?>; color: <?php echo $password_msg['type']==='success' ? 'var(--ios-green)' : 'var(--ios-red)'; ?>; text-align: center;"><?php echo $password_msg['text']; ?></div><?php endif; ?>
+            <form method="POST" action="?tab=settings">
+                <input type="password" name="old_password" class="form-input" placeholder="كلمة المرور الحالية" required>
+                <input type="password" name="new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="confirm_new_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_old" class="btn btn-primary" style="flex:1;">تحديث</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="passwordOtpModal" class="confirm-modal" <?php if($otp_msg) echo 'style="display:flex"'; ?>>
+        <div class="confirm-card fade-in">
+            <h3 style="margin-bottom: 1rem;">تغيير كلمة المرور - عبر OTP</h3>
+            <?php if ($otp_msg): ?><div style="padding: 12px; border-radius: 12px; margin-bottom: 15px; font-weight: 600; font-size: 0.9rem; background: <?php echo $otp_msg['type']==='success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,59,48,0.15)'; ?>; color: <?php echo $otp_msg['type']==='success' ? 'var(--ios-green)' : 'var(--ios-red)'; ?>; text-align: center;"><?php echo $otp_msg['text']; ?></div><?php endif; ?>
+            <form method="POST" action="?tab=settings">
+                <button type="submit" name="request_password_otp" class="btn" style="background:#5856D6; margin-bottom:1rem;">إرسال رمز OTP للهاتف</button>
+            </form>
+            <form method="POST" action="?tab=settings">
+                <input type="text" name="otp_code" class="form-input" placeholder="أدخل رمز OTP" maxlength="6" required>
+                <input type="password" name="otp_new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="otp_confirm_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_otp" class="btn btn-primary" style="flex:1;">تحديث عبر OTP</button></div>
+            </form>
+        </div>
+    </div>
+
     <div id="confirmModal" class="confirm-modal"><div class="confirm-card fade-in"><h3 style="margin-bottom: 1.5rem;">تأكيد التحويل</h3><div style="background: rgba(255,255,255,0.03); padding: 1.5rem; border-radius: 24px; margin-bottom: 2rem;"><p style="margin-bottom: 10px;">إلى: <span id="conf_name" style="color: var(--ios-green); font-weight: 800;"></span></p><p style="margin-bottom: 10px;">المبلغ: <span id="conf_amt" style="font-weight: 700;"></span></p><p style="margin-bottom: 10px;">العمولة: <span id="conf_fee" style="color: var(--ios-blue);"></span></p><hr style="border: 0.5px solid var(--border); margin: 15px 0;"><p style="font-weight: 800; font-size: 1.2rem;">الإجمالي: <span id="conf_total"></span></p></div><form method="POST"><input type="hidden" name="receiver_phone" id="post_phone"><input type="hidden" name="amount" id="post_amt"><input type="hidden" name="currency" id="post_curr"><input type="hidden" name="pin" id="post_pin"><div style="display: flex; gap: 12px;"><button type="button" onclick="closeConfirm()" class="btn" style="flex: 1; background: rgba(255,255,255,0.05);">تراجع</button><button type="submit" name="confirm_transfer" class="btn btn-primary" style="flex: 1;">تأكيد وإرسال</button></div></form></div></div>
 
     <script>
@@ -312,6 +404,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
         }
         async function fetchRecipientName(phone) { if (phone.length < 10) return null; const res = await fetch('get_recipient.php?phone=' + phone); const data = await res.json(); const display = document.getElementById('recipient_name_display'); if (data.success) { display.innerText = '✅ ' + data.name; return data.name; } else { display.innerText = '❌ غير مسجل'; return null; } }
         async function showConfirmation(e, type) { e.preventDefault(); const phone = document.getElementById('full_phone').value; const amt = parseFloat(document.getElementById('full_amount').value); const curr = document.getElementById('full_curr').value; const pin = document.getElementById('full_pin').value; const name = await fetchRecipientName(phone); if (!name) { alert("المستلم غير موجود!"); return; } const fee = Math.ceil(amt/50)*<?php echo $fee_val; ?>; document.getElementById('conf_name').innerText = name; document.getElementById('conf_amt').innerText = amt + " " + curr; document.getElementById('conf_fee').innerText = fee + " " + curr; document.getElementById('conf_total').innerText = (amt+fee) + " " + curr; document.getElementById('post_phone').value = phone; document.getElementById('post_amt').value = amt; document.getElementById('post_curr').value = curr; document.getElementById('post_pin').value = pin; document.getElementById('confirmModal').style.display = 'flex'; }
+
+        function exportHistoryPdf() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+            doc.setFontSize(16);
+            doc.text('QPAY - Financial History Report', 40, 40);
+            doc.setFontSize(11);
+            doc.text('Account: <?php echo addslashes($user['full_name_ar']); ?>', 40, 65);
+            doc.text('Phone: <?php echo addslashes($user['phone']); ?>', 40, 82);
+            doc.text('Generated: <?php echo date('Y-m-d H:i'); ?>', 40, 99);
+
+            const rows = <?php echo json_encode(array_map(function($t) use ($user) {
+                $isSender = ($t['sender_phone'] == $user['phone']);
+                $curr = $t['sender_curr'] ?? $t['receiver_curr'];
+                $symbol = currency_symbol($curr);
+                return [
+                    date('Y-m-d H:i', strtotime($t['created_at'])),
+                    $isSender ? 'Outgoing' : 'Incoming',
+                    ($isSender ? '-' : '+') . $symbol . ' ' . number_format($t['amount'], 1),
+                    $t['sender_name'] ?? '-',
+                    $t['receiver_name'] ?? '-'
+                ];
+            }, $transactions), JSON_UNESCAPED_UNICODE); ?>;
+
+            doc.autoTable({
+                startY: 120,
+                head: [['Date', 'Type', 'Amount', 'Sender', 'Receiver']],
+                body: rows,
+                theme: 'grid',
+                headStyles: { fillColor: [0, 122, 255] },
+                styles: { fontSize: 9, cellPadding: 6 }
+            });
+            doc.save('QPay_History_<?php echo date('Y-m-d'); ?>.pdf');
+        }
+
         function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
     </script>
 </body>
