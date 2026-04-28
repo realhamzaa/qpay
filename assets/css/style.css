@@ -1,0 +1,103 @@
+/* 
+   QPay Final Master Stylesheet 
+   Version 1.2: Fixed Precision, Missing Classes, and RTL Support.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+    --ios-blue: #007AFF;
+    --ios-green: #30D158;
+    --ios-red: #FF3B30;
+    --ios-gray: #8E8E93;
+    --bg-dark: #000;
+    --card-bg: #1c1c1e;
+    --input-bg: #2c2c2e;
+    --border: rgba(255, 255, 255, 0.1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Readex Pro', 'Tajawal', sans-serif; }
+
+body { background: var(--bg-dark); color: #fff; min-height: 100vh; overflow-x: hidden; line-height: 1.6; }
+
+.app-container { display: flex; flex-direction: column; min-height: 100vh; }
+.main-wrapper { display: flex; flex: 1; position: relative; }
+
+/* 🧭 Sidebar (Desktop) */
+@media (min-width: 769px) {
+    .desktop-nav { width: 280px; height: 100vh; position: sticky; top: 0; background: #0a0a0a; border-left: 1px solid var(--border); padding: 3rem 1.5rem; }
+    .main-content { padding: 40px 60px; max-width: 1000px; margin: 0 auto; width: 100%; }
+    .mobile-only { display: none !important; }
+}
+
+@media (max-width: 768px) {
+    .desktop-only { display: none !important; }
+    .main-content { padding: 20px 15px 120px; width: 100%; display: block; }
+    .ios-list, .ios-list-group, .wallet-card, .glass-card, .profile-card { width: 100%; max-width: 100%; text-align: right; }
+    h1, h2, h3, p { text-align: right; width: 100%; }
+}
+
+/* 🧭 Bottom Nav */
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(18, 18, 18, 0.96); backdrop-filter: blur(25px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 10px 0 calc(15px + env(safe-area-inset-bottom)); z-index: 1000; }
+.nav-item { color: var(--ios-gray); text-decoration: none; text-align: center; font-size: 0.7rem; flex: 1; font-weight: 500; }
+.nav-item.active { color: var(--ios-blue); }
+.nav-item i { font-size: 1.6rem; display: block; margin-bottom: 6px; }
+
+.desktop-link { color: var(--ios-gray); text-decoration: none; padding: 15px 20px; border-radius: 16px; display: flex; align-items: center; gap: 15px; margin-bottom: 12px; font-weight: 500; font-size: 1.05rem; }
+.desktop-link.active { background: var(--ios-blue); color: #fff; }
+
+/* 🃏 Logo Circle */
+.logo-circle { width: 50px; height: 50px; background: var(--ios-blue); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: #fff; }
+
+/* 🃏 Wallet Card */
+.wallet-card { border-radius: 32px; padding: 2.5rem 1.5rem; margin-bottom: 2.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+.wallet-balance { font-size: 3.5rem; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 10px; margin-top: 1rem; }
+.wallet-currency-symbol { font-size: 1.8rem; opacity: 0.8; font-weight: 400; }
+
+/* 🔄 Segmented Control */
+.segmented-control { background: #1c1c1e; border-radius: 16px; padding: 2px; display: flex; position: relative; margin: 0 auto 2.5rem; max-width: 400px; border: 1px solid var(--border); overflow: hidden; }
+.segment-btn { flex: 1; background: none; border: none; color: var(--ios-gray); padding: 12px; cursor: pointer; z-index: 2; font-weight: 600; font-size: 0.9rem; position: relative; }
+.segment-btn.active { color: #fff; }
+.segment-indicator { position: absolute; top: 2px; bottom: 2px; width: 33.33%; background: #3a3a3c; border-radius: 14px; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1; }
+
+/* 📜 iOS List Items */
+.ios-list { background: var(--card-bg); border-radius: 26px; overflow: hidden; border: 1px solid var(--border); }
+.ios-item { display: flex; align-items: center; gap: 15px; padding: 18px; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; }
+.ios-item:last-child { border-bottom: none; }
+.ios-icon { width: 45px; height: 45px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+.ios-label { flex: 1; min-width: 0; text-align: right; }
+.ios-title { display: block; font-weight: 600; font-size: 1rem; }
+.ios-subtitle { font-size: 0.8rem; color: var(--ios-gray); }
+.ios-value { font-weight: 700; font-size: 1.1rem; flex-shrink: 0; margin-right: 10px; }
+.ios-arrow { font-size: 0.85rem; color: var(--ios-gray); transform: scaleX(-1); }
+
+/* 💸 Receipt & Modals */
+.receipt-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.94); z-index: 5000; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(15px); }
+.receipt-card { background: #fff; color: #000; width: 100%; max-width: 380px; padding: 3rem 2rem; border-radius: 38px; text-align: center; }
+.receipt-success-icon { width: 60px; height: 60px; background: var(--ios-green); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 1.8rem; }
+.receipt-row { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 10px; }
+.receipt-label { color: #8E8E93; font-size: 0.9rem; }
+.receipt-value { font-weight: 700; font-size: 1rem; }
+
+.transfer-error { background: rgba(255,59,48,0.15); color: var(--ios-red); padding: 15px; border-radius: 18px; margin-bottom: 1.5rem; font-weight: 700; border: 1px solid rgba(255,59,48,0.3); text-align: center; }
+
+.ios-list-group { margin-bottom: 2.5rem; }
+.ios-list-header { font-size: 0.9rem; color: var(--ios-gray); margin: 0 15px 10px 0; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* 🚨 Animation */
+.fade-in { animation: fadeIn 0.5s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes flyMoney { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; } }
+.money-fly { position: fixed; font-size: 2.5rem; z-index: 10000; pointer-events: none; animation: flyMoney 2.5s forwards cubic-bezier(0.1, 0.7, 1.0, 0.1); }
+
+.glass-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 28px; padding: 1.5rem; margin-bottom: 1.5rem; width: 100%; }
+.form-input { width: 100%; padding: 16px; background: var(--input-bg); border: 1px solid transparent; border-radius: 16px; color: #fff; margin-bottom: 1.2rem; font-size: 1.1rem; outline: none; }
+.btn { padding: 16px 24px; border-radius: 16px; border: none; font-weight: 700; cursor: pointer; display: inline-block; text-align: center; text-decoration: none; font-size: 1.1rem; width: 100%; }
+.btn-primary { background: var(--ios-blue); color: #fff; }
+
+.confirm-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 4000; padding: 20px; }
+.confirm-card { background: var(--card-bg); border-radius: 30px; width: 100%; max-width: 420px; padding: 2.2rem; border: 1px solid var(--border); }
+.warning-banner { background: var(--ios-red); padding: 18px; text-align: center; font-weight: 700; position: sticky; top: 0; z-index: 2000; }
+.chip-list { display: flex; gap: 12px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+.recipient-chip { padding: 12px 20px; background: #2c2c2e; border-radius: 22px; border: 1px solid var(--border); white-space: nowrap; cursor: pointer; font-weight: 600; }
