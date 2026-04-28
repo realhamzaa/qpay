@@ -5,6 +5,9 @@ if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) { header("Location: 
 
 $adminId = $_SESSION['user_id'];
 
+$defaultCities = ['غزة','النصيرات','دير البلح','خانيونس','رفح','جباليا','بيت لاهيا','بيت حانون','الزوايدة','البريج','المغازي'];
+$defaultCurrencies = ['ILS','USD','JOD'];
+
 // معالجة العمليات الإدارية
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['action'])) {
@@ -22,7 +25,57 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             notifyUser($targetId, "تم إعادة تعيين رمز PIN الخاص بك إلى 1234 من قبل الإدارة.", 'warning');
         }
     }
+
+
+    if (isset($_POST['entity']) && $_POST['entity'] === 'city') {
+        $citiesRaw = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'available_cities'");
+        $citiesRaw->execute();
+        $cities = json_decode($citiesRaw->fetchColumn() ?: '[]', true);
+        if (!is_array($cities) || empty($cities)) { $cities = $defaultCities; }
+
+        if ($_POST['crud'] === 'create' && !empty($_POST['city_name'])) {
+            $city = trim($_POST['city_name']);
+            if (!in_array($city, $cities)) { $cities[] = $city; }
+        } elseif ($_POST['crud'] === 'update' && isset($_POST['old_city'], $_POST['city_name'])) {
+            foreach ($cities as &$c) { if ($c === $_POST['old_city']) { $c = trim($_POST['city_name']); } }
+        } elseif ($_POST['crud'] === 'delete' && !empty($_POST['old_city'])) {
+            $cities = array_values(array_filter($cities, fn($c) => $c !== $_POST['old_city']));
+        }
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('available_cities', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")->execute([json_encode(array_values(array_unique($cities)), JSON_UNESCAPED_UNICODE)]);
+    }
+
+    if (isset($_POST['entity']) && $_POST['entity'] === 'currency') {
+        $currRaw = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'available_currencies'");
+        $currRaw->execute();
+        $currencies = json_decode($currRaw->fetchColumn() ?: '[]', true);
+        if (!is_array($currencies) || empty($currencies)) { $currencies = $defaultCurrencies; }
+
+        if ($_POST['crud'] === 'create' && !empty($_POST['currency_code'])) {
+            $code = strtoupper(trim($_POST['currency_code']));
+            if (!in_array($code, $currencies)) { $currencies[] = $code; }
+        } elseif ($_POST['crud'] === 'update' && isset($_POST['old_currency'], $_POST['currency_code'])) {
+            foreach ($currencies as &$c) { if ($c === $_POST['old_currency']) { $c = strtoupper(trim($_POST['currency_code'])); } }
+        } elseif ($_POST['crud'] === 'delete' && !empty($_POST['old_currency'])) {
+            $currencies = array_values(array_filter($currencies, fn($c) => $c !== $_POST['old_currency']));
+        }
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('available_currencies', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")->execute([json_encode(array_values(array_unique($currencies)), JSON_UNESCAPED_UNICODE)]);
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_user' && !empty($_POST['user_id'])) {
+        $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$_POST['user_id']]);
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && !empty($_POST['user_id'])) {
+        $pdo->prepare("UPDATE users SET is_admin = IF(is_admin = 1, 0, 1) WHERE id = ?")->execute([$_POST['user_id']]);
+    }
 }
+
+$citiesSetting = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'available_cities'")->fetchColumn();
+$currenciesSetting = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'available_currencies'")->fetchColumn();
+$availableCities = json_decode($citiesSetting ?: '[]', true);
+$availableCurrencies = json_decode($currenciesSetting ?: '[]', true);
+if (!is_array($availableCities) || empty($availableCities)) { $availableCities = $defaultCities; }
+if (!is_array($availableCurrencies) || empty($availableCurrencies)) { $availableCurrencies = $defaultCurrencies; }
 
 // جلب الإحصائيات
 $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
@@ -104,14 +157,61 @@ $users = $pdo->query("SELECT * FROM users WHERE id != $adminId ORDER BY id DESC"
                                     <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
                                     <input type="text" name="warning_msg" placeholder="نص التحذير..." style="padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff; width: 150px;">
                                     <button type="submit" name="action" value="send_warning" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #5856D6;"><i class="fa fa-triangle-exclamation"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="toggle_admin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #0A84FF;"><?php echo !empty($u['is_admin']) ? 'سحب أدمن' : 'منح أدمن'; ?></button>
+                                </form>
                                 <form method="POST" style="display: inline-flex; gap: 5px;" onsubmit="return confirm('هل أنت متأكد من إعادة تعيين PIN لـ 1234؟')">
                                     <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
                                     <button type="submit" name="action" value="reset_pin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #FF9500;"><i class="fa fa-key"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;" onsubmit="return confirm('سيتم حذف المستخدم وكافة بياناته، متابعة؟')">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="delete_user" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #8E8E93;">حذف</button>
                                 </form>
                             </div>
                         </div>
 <?php endforeach; ?>
                 </div>
+
+
+                <h3 class="ios-list-header" style="margin-top:2rem;">إدارة المدن (CRUD)</h3>
+                <div class="glass-card">
+                    <?php foreach ($availableCities as $city): ?>
+                    <form method="POST" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="hidden" name="old_city" value="<?php echo htmlspecialchars($city); ?>">
+                        <input type="text" name="city_name" value="<?php echo htmlspecialchars($city); ?>" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="update" class="btn" style="width:auto; background:#0A84FF; padding:10px 14px;">تعديل</button>
+                        <button type="submit" name="crud" value="delete" class="btn" style="width:auto; background:#FF3B30; padding:10px 14px;">حذف</button>
+                    </form>
+                    <?php endforeach; ?>
+                    <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="text" name="city_name" placeholder="إضافة مدينة جديدة" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="create" class="btn" style="width:auto; background:#34C759; padding:10px 14px;">إضافة</button>
+                    </form>
+                </div>
+
+                <h3 class="ios-list-header" style="margin-top:2rem;">إدارة العملات (CRUD)</h3>
+                <div class="glass-card">
+                    <?php foreach ($availableCurrencies as $currency): ?>
+                    <form method="POST" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="hidden" name="entity" value="currency">
+                        <input type="hidden" name="old_currency" value="<?php echo htmlspecialchars($currency); ?>">
+                        <input type="text" name="currency_code" value="<?php echo htmlspecialchars($currency); ?>" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="update" class="btn" style="width:auto; background:#0A84FF; padding:10px 14px;">تعديل</button>
+                        <button type="submit" name="crud" value="delete" class="btn" style="width:auto; background:#FF3B30; padding:10px 14px;">حذف</button>
+                    </form>
+                    <?php endforeach; ?>
+                    <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                        <input type="hidden" name="entity" value="currency">
+                        <input type="text" name="currency_code" placeholder="إضافة عملة جديدة" class="form-input" style="margin-bottom:0; flex:1; min-width:180px; text-transform:uppercase;">
+                        <button type="submit" name="crud" value="create" class="btn" style="width:auto; background:#34C759; padding:10px 14px;">إضافة</button>
+                    </form>
+                </div>
+
             </main>
         </div>
     </div>

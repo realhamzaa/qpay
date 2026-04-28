@@ -6,9 +6,19 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $fullName = $_POST['full_name'];
     $phone = $_POST['phone'];
+    $country = $_POST['country'] ?? 'فلسطين';
+    $city = $_POST['city'] ?? '';
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $pin = password_hash($_POST['pin'], PASSWORD_DEFAULT);
 
+    if ($country !== 'فلسطين') { $error = '❌ الدولة المتاحة للتسجيل هي فلسطين فقط'; }
+    if (!in_array($city, ['غزة','النصيرات','دير البلح','خانيونس','رفح','جباليا','بيت لاهيا','بيت حانون','الزوايدة','البريج','المغازي'])) { $error = '❌ يرجى اختيار مدينة صحيحة من قطاع غزة'; }
+
+    if ($error) {
+        // منع المتابعة عند فشل التحقق
+    } else
+
+    {
     try {
         $pdo->beginTransaction();
         $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ?");
@@ -30,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } catch (Exception $e) {
         $pdo->rollBack();
         $error = $e->getMessage();
+    }
     }
 }
 ?>
@@ -62,6 +73,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 6px; display: block; text-align: right;">رقم الهاتف</label>
                 <input type="text" name="phone" class="form-input" required placeholder="05XXXXXXXX">
                 
+
+                <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 6px; display: block; text-align: right;">الدولة</label>
+                <input type="text" name="country" class="form-input" value="فلسطين" readonly>
+
+                <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 6px; display: block; text-align: right;">المدينة (قطاع غزة)</label>
+                <select name="city" class="form-input" required>
+                    <option value="">اختر المدينة</option>
+                    <option value="غزة">غزة</option>
+                    <option value="النصيرات">النصيرات</option>
+                    <option value="دير البلح">دير البلح</option>
+                    <option value="خانيونس">خانيونس</option>
+                    <option value="رفح">رفح</option>
+                    <option value="جباليا">جباليا</option>
+                    <option value="بيت لاهيا">بيت لاهيا</option>
+                    <option value="بيت حانون">بيت حانون</option>
+                    <option value="الزوايدة">الزوايدة</option>
+                    <option value="البريج">البريج</option>
+                    <option value="المغازي">المغازي</option>
+                </select>
+
                 <label style="font-size: 0.85rem; color: var(--ios-gray); margin-bottom: 6px; display: block; text-align: right;">كلمة المرور</label>
                 <input type="password" name="password" class="form-input" required placeholder="أدخل كلمة مرور قوية">
 
