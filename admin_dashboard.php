@@ -132,23 +132,51 @@ $totalFees = $pdo->query("SELECT SUM(fee_amount) FROM transactions")->fetchColum
                 </div>
 
                 <!-- Users Management -->
-                <h3 class="ios-list-header">إدارة الحسابات (DataTables + Server-side)</h3>
-                <div class="glass-card" style="overflow:auto;">
-                    <table id="usersTable" class="display" style="width:100%; color:#fff;">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>الاسم</th>
-                                <th>الهاتف</th>
-                                <th>الحد اليومي</th>
-                                <th>الحالة</th>
-                                <th>الصلاحية</th>
-                                <th>التسجيل</th>
-                                <th>إجراءات</th>
-                            </tr>
-                        </thead>
-                    </table>
+                <h3 class="ios-list-header">إدارة الحسابات</h3>
+                <div class="ios-list">
+                    <?php foreach ($users as $u): ?>
+                        <div class="ios-item" style="flex-wrap: wrap; gap: 20px;">
+                            <div class="ios-icon" style="background: rgba(255,255,255,0.05); font-size: 1.2rem;"><?php echo mb_substr($u['full_name_ar'], 0, 1, 'utf-8'); ?></div>
+                            <div class="ios-label" style="min-width: 200px;">
+                                <span class="ios-title"><?php echo $u['full_name_ar']; ?> <?php if($u['is_frozen']) echo "<span style='color:var(--ios-red); font-size:0.7rem;'>(مجمد)</span>"; ?></span>
+                                <span class="ios-subtitle"><?php echo $u['phone']; ?> | الليمت: <?php echo number_format($u['daily_limit'], 0); ?> ₪</span>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <form method="POST" style="display: inline-flex; gap: 5px;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <input type="number" name="limit" value="<?php echo $u['daily_limit']; ?>" style="width: 80px; padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff;">
+                                    <button type="submit" name="action" value="set_limit" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-blue);">تعديل</button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <?php if ($u['is_frozen']): ?>
+                                        <button type="submit" name="action" value="unfreeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-green);">فك التجميد</button>
+                                    <?php else: ?>
+                                        <button type="submit" name="action" value="freeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-red);">تجميد</button>
+                                    <?php endif; ?>
+                                </form>
+                                <form method="POST" style="display: inline-flex; gap: 5px;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <input type="text" name="warning_msg" placeholder="نص التحذير..." style="padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff; width: 150px;">
+                                    <button type="submit" name="action" value="send_warning" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #5856D6;"><i class="fa fa-triangle-exclamation"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="toggle_admin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #0A84FF;"><?php echo !empty($u['is_admin']) ? 'سحب أدمن' : 'منح أدمن'; ?></button>
+                                </form>
+                                <form method="POST" style="display: inline-flex; gap: 5px;" onsubmit="return confirm('هل أنت متأكد من إعادة تعيين PIN لـ 1234؟')">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="reset_pin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #FF9500;"><i class="fa fa-key"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;" onsubmit="return confirm('سيتم حذف المستخدم وكافة بياناته، متابعة؟')">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="delete_user" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #8E8E93;">حذف</button>
+                                </form>
+                            </div>
+                        </div>
+<?php endforeach; ?>
                 </div>
+
 
                 <h3 class="ios-list-header" style="margin-top:2rem;">إدارة المدن (CRUD)</h3>
                 <div class="glass-card">

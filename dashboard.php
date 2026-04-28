@@ -338,9 +338,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
             <h3 style="margin-bottom: 1rem;">تغيير كلمة المرور - عبر كلمة المرور الحالية</h3>
             <?php if ($password_msg): ?><div style="padding: 12px; border-radius: 12px; margin-bottom: 15px; font-weight: 600; font-size: 0.9rem; background: <?php echo $password_msg['type']==='success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,59,48,0.15)'; ?>; color: <?php echo $password_msg['type']==='success' ? 'var(--ios-green)' : 'var(--ios-red)'; ?>; text-align: center;"><?php echo $password_msg['text']; ?></div><?php endif; ?>
             <form method="POST" action="?tab=settings">
-                <input type="password" name="old_password" class="form-input" autocomplete="current-password" placeholder="كلمة المرور الحالية" required>
-                <input type="password" name="new_password" class="form-input" autocomplete="new-password" placeholder="كلمة المرور الجديدة" required>
-                <input type="password" name="confirm_new_password" class="form-input" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <input type="password" name="old_password" class="form-input" placeholder="كلمة المرور الحالية" required>
+                <input type="password" name="new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="confirm_new_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
                 <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_old" class="btn btn-primary" style="flex:1;">تحديث</button></div>
             </form>
         </div>
@@ -354,9 +354,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                 <button type="submit" name="request_password_otp" class="btn" style="background:#5856D6; margin-bottom:1rem;">إرسال رمز OTP للهاتف</button>
             </form>
             <form method="POST" action="?tab=settings">
-                <input type="text" name="otp_code" class="form-input" inputmode="numeric" autocomplete="one-time-code" placeholder="أدخل رمز OTP" maxlength="6" required>
-                <input type="password" name="otp_new_password" class="form-input" autocomplete="new-password" placeholder="كلمة المرور الجديدة" required>
-                <input type="password" name="otp_confirm_password" class="form-input" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <input type="text" name="otp_code" class="form-input" placeholder="أدخل رمز OTP" maxlength="6" required>
+                <input type="password" name="otp_new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="otp_confirm_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
                 <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_otp" class="btn btn-primary" style="flex:1;">تحديث عبر OTP</button></div>
             </form>
         </div>
