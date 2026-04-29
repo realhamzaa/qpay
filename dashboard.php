@@ -9,6 +9,8 @@ $user = $stmt->fetch();
 
 $daily_limit = (float)($user['daily_limit'] ?? 1000.00);
 $daily_usage = (float)($user['current_daily_usage'] ?? 0.00);
+$receive_limit = (float)($user['daily_receive_limit'] ?? 2000.00);
+$receive_usage = (float)($user['current_daily_receive'] ?? 0.00);
 
 $walletStmt = $pdo->prepare("SELECT currency, balance FROM wallets WHERE user_id = ?");
 $walletStmt->execute([$userId]);
@@ -155,9 +157,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                         </div>
                     </div>
                     <h3 class="ios-list-header" style="font-weight: 400; text-align: right; margin-right: 5px;">المعاملات الأخيرة</h3>
-                    <div class="ios-list">
+                    <div class="ios-list" id="recentTransactionsList">
                         <?php foreach (array_slice($transactions, 0, 5) as $t): $isSender = ($t['sender_phone'] == $user['phone']); ?>
-                            <div class="ios-item" onclick="viewTransaction(<?php echo htmlspecialchars(json_encode([
+                            <div class="ios-item" data-tx-id="<?php echo (int)$t['id']; ?>" onclick="viewTransaction(<?php echo htmlspecialchars(json_encode([
                                 'id' => $t['id'], 'amount' => $t['amount'], 'curr' => $t['sender_curr'] ?? $t['receiver_curr'], 
                                 'sender' => $t['sender_name'], 'sender_phone' => $t['sender_phone'],
                                 'receiver' => $t['receiver_name'], 'receiver_phone' => $t['receiver_phone'],
@@ -195,10 +197,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                     </div>
 
                 <?php elseif ($tab == 'history'): ?>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"><h1 style="font-weight: 800;">السجل المالي</h1><button type="button" onclick="exportHistoryPdf()" class="btn history-export-btn"><i class="fa fa-file-pdf" style="margin-left: 5px;"></i> تصدير PDF</button></div>
-                    <div class="ios-list">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"><h1 style="font-weight: 800;">السجل المالي</h1><button type="button" onclick="exportHistoryPdfServer()" class="btn history-export-btn"><i class="fa fa-file-pdf" style="margin-left: 5px;"></i> تصدير PDF</button></div>
+                    <div class="glass-card" style="padding:12px; margin-bottom:1rem;">
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap:8px;">
+                            <input type="text" id="historySearch" class="form-input" placeholder="بحث بالاسم أو الرقم..." style="margin-bottom:0;">
+                            <select id="historyCurrency" class="form-input" style="margin-bottom:0;"><option value="">كل العملات</option><option value="ILS">ILS</option><option value="USD">USD</option><option value="JOD">JOD</option></select>
+                            <select id="historyType" class="form-input" style="margin-bottom:0;"><option value="">كل الأنواع</option><option value="incoming">واردة</option><option value="outgoing">صادرة</option></select>
+                            <input type="date" id="historyDateFrom" class="form-input" style="margin-bottom:0;">
+                            <input type="date" id="historyDateTo" class="form-input" style="margin-bottom:0;">
+                            <button type="button" id="historyApplyFilters" class="btn" style="padding:10px 12px; background:#0A84FF;">تطبيق الفلاتر</button>
+                        </div>
+                    </div>
+                    <div class="ios-list" id="historyTransactionsList" data-offset="<?php echo count($transactions); ?>" data-latest="<?php echo !empty($transactions[0]['created_at']) ? $transactions[0]['created_at'] : ""; ?>" data-latest-id="<?php echo !empty($transactions[0]['id']) ? (int)$transactions[0]['id'] : 0; ?>">
                         <?php foreach ($transactions as $t): $isSender = ($t['sender_phone'] == $user['phone']); ?>
-                            <div class="ios-item" onclick="viewTransaction(<?php echo htmlspecialchars(json_encode([
+                            <div class="ios-item" data-tx-id="<?php echo (int)$t['id']; ?>" onclick="viewTransaction(<?php echo htmlspecialchars(json_encode([
                                 'id' => $t['id'], 'amount' => $t['amount'], 'curr' => $t['sender_curr'] ?? $t['receiver_curr'], 
                                 'sender' => $t['sender_name'], 'sender_phone' => $t['sender_phone'],
                                 'receiver' => $t['receiver_name'], 'receiver_phone' => $t['receiver_phone'],
@@ -210,6 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                             </div>
                         <?php endforeach; ?>
                     </div>
+                    <div id="historyLoadMore" style="text-align:center; color:var(--ios-gray); padding:14px; display:none;">جاري تحميل المزيد...</div>
 
                 <?php elseif ($tab == 'notifications'): ?>
                     <h1 style="font-weight: 800; margin-bottom: 2rem;">التنبيهات</h1>
@@ -245,6 +258,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                             <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
                                 <span style="font-size: 0.95rem; color: #fff; font-weight: 600;">الاستهلاك اليومي</span>
                                 <span style="font-weight: 700; font-size: 0.95rem; direction: ltr; display: inline-block;">₪ <?php echo number_format($daily_usage, 0); ?> / <?php echo number_format($daily_limit, 0); ?></span>
+                            </div>
+
+
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
+                                <span style="font-size: 0.95rem; color: #fff; font-weight: 600;">استهلاك الاستقبال اليومي</span>
+                                <span style="font-weight: 700; font-size: 0.95rem; direction: ltr; display: inline-block;">₪ <?php echo number_format($receive_usage, 0); ?> / <?php echo number_format($receive_limit, 0); ?></span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
+                                <span style="font-size: 0.95rem; color: #fff; font-weight: 600;">حالة KYC</span>
+                                <span style="font-weight:700; font-size:0.95rem; color: <?php echo ($user['kyc_status'] ?? 'pending') === 'approved' ? 'var(--ios-green)' : (($user['kyc_status'] ?? 'pending') === 'rejected' ? 'var(--ios-red)' : '#FFCC00'); ?>;"><?php echo strtoupper($user['kyc_status'] ?? 'pending'); ?></span>
                             </div>
                             <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
                                 <div style="width: <?php echo min(100, ($daily_usage/$daily_limit)*100); ?>%; height: 100%; background: linear-gradient(90deg, var(--ios-blue), #5AC8FA); box-shadow: 0 0 15px var(--ios-blue); transition: width 1s ease;"></div>
@@ -338,9 +361,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
             <h3 style="margin-bottom: 1rem;">تغيير كلمة المرور - عبر كلمة المرور الحالية</h3>
             <?php if ($password_msg): ?><div style="padding: 12px; border-radius: 12px; margin-bottom: 15px; font-weight: 600; font-size: 0.9rem; background: <?php echo $password_msg['type']==='success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,59,48,0.15)'; ?>; color: <?php echo $password_msg['type']==='success' ? 'var(--ios-green)' : 'var(--ios-red)'; ?>; text-align: center;"><?php echo $password_msg['text']; ?></div><?php endif; ?>
             <form method="POST" action="?tab=settings">
-                <input type="password" name="old_password" class="form-input" placeholder="كلمة المرور الحالية" required>
-                <input type="password" name="new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
-                <input type="password" name="confirm_new_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <input type="password" name="old_password" class="form-input" autocomplete="current-password" placeholder="كلمة المرور الحالية" required>
+                <input type="password" name="new_password" class="form-input" autocomplete="new-password" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="confirm_new_password" class="form-input" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة" required>
                 <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_old" class="btn btn-primary" style="flex:1;">تحديث</button></div>
             </form>
         </div>
@@ -354,9 +377,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
                 <button type="submit" name="request_password_otp" class="btn" style="background:#5856D6; margin-bottom:1rem;">إرسال رمز OTP للهاتف</button>
             </form>
             <form method="POST" action="?tab=settings">
-                <input type="text" name="otp_code" class="form-input" placeholder="أدخل رمز OTP" maxlength="6" required>
-                <input type="password" name="otp_new_password" class="form-input" placeholder="كلمة المرور الجديدة" required>
-                <input type="password" name="otp_confirm_password" class="form-input" placeholder="تأكيد كلمة المرور الجديدة" required>
+                <input type="text" name="otp_code" class="form-input" inputmode="numeric" autocomplete="one-time-code" placeholder="أدخل رمز OTP" maxlength="6" required>
+                <input type="password" name="otp_new_password" class="form-input" autocomplete="new-password" placeholder="كلمة المرور الجديدة" required>
+                <input type="password" name="otp_confirm_password" class="form-input" autocomplete="new-password" placeholder="تأكيد كلمة المرور الجديدة" required>
                 <div style="display:flex; gap:12px;"><button type="button" onclick="this.closest('.confirm-modal').style.display='none'" class="btn" style="flex:1; background: rgba(255,255,255,0.05);">إلغاء</button><button type="submit" name="update_password_otp" class="btn btn-primary" style="flex:1;">تحديث عبر OTP</button></div>
             </form>
         </div>
@@ -408,6 +431,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
         async function fetchRecipientName(phone) { if (phone.length < 10) return null; const res = await fetch('get_recipient.php?phone=' + phone); const data = await res.json(); const display = document.getElementById('recipient_name_display'); if (data.success) { display.innerText = '✅ ' + data.name; return data.name; } else { display.innerText = '❌ غير مسجل'; return null; } }
         async function showConfirmation(e, type) { e.preventDefault(); const phone = document.getElementById('full_phone').value; const amt = parseFloat(document.getElementById('full_amount').value); const curr = document.getElementById('full_curr').value; const pin = document.getElementById('full_pin').value; const name = await fetchRecipientName(phone); if (!name) { alert("المستلم غير موجود!"); return; } const fee = Math.ceil(amt/50)*<?php echo $fee_val; ?>; document.getElementById('conf_name').innerText = name; document.getElementById('conf_amt').innerText = amt + " " + curr; document.getElementById('conf_fee').innerText = fee + " " + curr; document.getElementById('conf_total').innerText = (amt+fee) + " " + curr; document.getElementById('post_phone').value = phone; document.getElementById('post_amt').value = amt; document.getElementById('post_curr').value = curr; document.getElementById('post_pin').value = pin; document.getElementById('confirmModal').style.display = 'flex'; }
 
+
+        function exportHistoryPdfServer() {
+            const params = new URLSearchParams({
+                q: historyQuery || '',
+                currency: historyFilters.currency || '',
+                type: historyFilters.type || '',
+                date_from: historyFilters.date_from || '',
+                date_to: historyFilters.date_to || ''
+            });
+            window.open('api/export_history_pdf.php?' + params.toString(), '_blank');
+        }
+
         function exportHistoryPdf() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
@@ -442,8 +477,179 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['confirm_transfer'])) {
             doc.save('QPay_History_<?php echo date('Y-m-d'); ?>.pdf');
         }
 
+
+        function txItemHtml(t) {
+            const sign = t.is_sender ? '-' : '+';
+            const color = t.is_sender ? 'var(--ios-red)' : 'var(--ios-green)';
+            const icon = t.is_sender ? 'fa-arrow-up' : 'fa-arrow-down';
+            const target = t.is_sender ? ('إلى ' + t.receiver_name) : ('من ' + t.sender_name);
+            const payload = encodeURIComponent(JSON.stringify({
+                id: t.id, amount: t.amount, curr: t.curr,
+                sender: t.sender_name, sender_phone: t.sender_phone,
+                receiver: t.receiver_name, receiver_phone: t.receiver_phone,
+                date: t.created_at
+            }));
+            return `<div class="ios-item" data-tx-id="${t.id}" onclick="viewTransaction(JSON.parse(decodeURIComponent('${payload}')))" style="cursor:pointer;">
+`+
+                `<div class="ios-icon" style="background:${t.is_sender ? 'rgba(255,59,48,0.1)' : 'rgba(48,209,88,0.1)'};"><i class="fa ${icon}" style="color:${color};"></i></div>`+
+                `<div class="ios-label"><span class="ios-title">${target}</span><span class="ios-subtitle">${t.time_ago}</span></div>`+
+                `<div class="ios-value" style="color:${color}; font-weight:700;">${sign}${t.symbol} ${Number(t.amount).toFixed(1)}</div></div>`;
+        }
+
+
+        function appendUnique(listEl, htmlItems) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = htmlItems;
+            const nodes = Array.from(wrap.children);
+            nodes.forEach(node => {
+                const id = node.getAttribute('data-tx-id');
+                if (!id || !listEl.querySelector(`[data-tx-id="${id}"]`)) {
+                    listEl.appendChild(node);
+                }
+            });
+        }
+
+        function prependUnique(listEl, htmlItems) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = htmlItems;
+            const nodes = Array.from(wrap.children).reverse();
+            nodes.forEach(node => {
+                const id = node.getAttribute('data-tx-id');
+                if (!id || !listEl.querySelector(`[data-tx-id="${id}"]`)) {
+                    listEl.prepend(node);
+                }
+            });
+        }
+
+        async function refreshRecentTransactions() {
+            const box = document.getElementById('recentTransactionsList');
+            if (!box) return;
+            const res = await fetch('api/transactions_feed.php?mode=recent&limit=5');
+            const out = await res.json();
+            if (!out.success) return;
+            box.innerHTML = out.items.map(txItemHtml).join('');
+        }
+
+        let historyLoading = false;
+        let historyQuery = "";
+        let historySearchTimer = null;
+        let historyFilters = { currency:"", type:"", date_from:"", date_to:"" };
+
+        function historyQueryString(extra = {}) {
+            const p = new URLSearchParams({
+                mode: 'history',
+                limit: String(extra.limit || 20),
+                offset: String(extra.offset || 0),
+                since: extra.since || '',
+                since_id: String(extra.since_id || 0),
+                q: historyQuery,
+                currency: historyFilters.currency,
+                type: historyFilters.type,
+                date_from: historyFilters.date_from,
+                date_to: historyFilters.date_to
+            });
+            return p.toString();
+        }
+
+        async function loadMoreHistory() {
+            const list = document.getElementById('historyTransactionsList');
+            const loader = document.getElementById('historyLoadMore');
+            if (!list || historyLoading) return;
+            historyLoading = true;
+            loader.style.display = 'block';
+            const offset = Number(list.dataset.offset || 0);
+            const res = await fetch(`api/transactions_feed.php?${historyQueryString({limit:20, offset})}`);
+            const out = await res.json();
+            if (out.success && out.items.length) {
+                appendUnique(list, out.items.map(txItemHtml).join(''));
+                list.dataset.offset = out.next_offset;
+            }
+            if (!out.has_more) loader.innerText = 'لا يوجد حركات أقدم';
+            historyLoading = false;
+            if (out.has_more) loader.style.display = 'none';
+        }
+
+
+        async function refreshHistoryNew() {
+            const list = document.getElementById('historyTransactionsList');
+            if (!list) return;
+            const since = encodeURIComponent(list.dataset.latest || '');
+            const sinceId = Number(list.dataset.latestId || 0);
+            const res = await fetch(`api/transactions_feed.php?${historyQueryString({limit:10, since, since_id: sinceId})}`);
+            const out = await res.json();
+            if (!out.success || !out.items.length) return;
+            prependUnique(list, out.items.map(txItemHtml).join(''));
+            list.dataset.latest = out.items[0].created_at;
+            list.dataset.latestId = out.latest_id || out.items[0].id;
+        }
+
+        window.addEventListener('scroll', () => {
+            if (!document.getElementById('historyTransactionsList')) return;
+            if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 220)) loadMoreHistory();
+        });
+
+
+        function resetHistoryFeed() {
+            const list = document.getElementById('historyTransactionsList');
+            if (!list) return;
+            list.innerHTML = '';
+            list.dataset.offset = '0';
+            list.dataset.latest = '';
+            list.dataset.latestId = '0';
+            loadMoreHistory();
+        }
+
+        const historySearchInput = document.getElementById('historySearch');
+        const historyCurrency = document.getElementById('historyCurrency');
+        const historyType = document.getElementById('historyType');
+        const historyDateFrom = document.getElementById('historyDateFrom');
+        const historyDateTo = document.getElementById('historyDateTo');
+        const historyApplyFilters = document.getElementById('historyApplyFilters');
+
+        if (historySearchInput) {
+            historySearchInput.addEventListener('input', () => {
+                clearTimeout(historySearchTimer);
+                historySearchTimer = setTimeout(() => {
+                    historyQuery = historySearchInput.value.trim();
+                    resetHistoryFeed();
+                }, 350);
+            });
+        }
+
+        if (historyApplyFilters) {
+            historyApplyFilters.addEventListener('click', () => {
+                historyFilters.currency = historyCurrency?.value || '';
+                historyFilters.type = historyType?.value || '';
+                historyFilters.date_from = historyDateFrom?.value || '';
+                historyFilters.date_to = historyDateTo?.value || '';
+                localStorage.setItem('qpay_history_filters', JSON.stringify({ q: historyQuery, ...historyFilters }));
+                resetHistoryFeed();
+            });
+        }
+
+        setInterval(refreshRecentTransactions, 15000);
+        setInterval(refreshHistoryNew, 12000);
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const saved = JSON.parse(localStorage.getItem('qpay_history_filters') || '{}');
+                historyQuery = saved.q || '';
+                historyFilters.currency = saved.currency || '';
+                historyFilters.type = saved.type || '';
+                historyFilters.date_from = saved.date_from || '';
+                historyFilters.date_to = saved.date_to || '';
+                if (historySearchInput) historySearchInput.value = historyQuery;
+                if (historyCurrency) historyCurrency.value = historyFilters.currency;
+                if (historyType) historyType.value = historyFilters.type;
+                if (historyDateFrom) historyDateFrom.value = historyFilters.date_from;
+                if (historyDateTo) historyDateTo.value = historyFilters.date_to;
+            } catch (e) {}
+            refreshRecentTransactions();
+            refreshHistoryNew();
+        });
+
         function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
     </script>
 <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')); }</script>
+    <script src="assets/js/notifications.js"></script>
 </body>
 </html>

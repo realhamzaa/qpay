@@ -1,4 +1,6 @@
 <?php
+header('Location: kyc_register.php');
+exit();
 require_once 'includes/functions.php';
 if (isset($_SESSION['user_id'])) { header("Location: dashboard.php"); exit(); }
 

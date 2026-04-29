@@ -61,6 +61,7 @@ function transferFunds($senderId, $receiverPhone, $amount, $currency, $pin) {
         $stmt->execute([$senderId]);
         $sender = $stmt->fetch();
         if (isset($sender['is_frozen']) && $sender['is_frozen']) { throw new Exception("❌ حسابك مجمد."); }
+        if (!$sender['is_admin'] && isset($sender['kyc_status']) && $sender['kyc_status'] !== 'approved') { throw new Exception("❌ لا يمكن إجراء التحويل قبل اعتماد KYC."); }
         if (!password_verify($pin, $sender['pin_hash'])) { throw new Exception("❌ رمز PIN خطأ."); }
         if (!$sender['is_admin']) {
             $usage = (float)($sender['current_daily_usage'] ?? 0);
@@ -72,6 +73,11 @@ function transferFunds($senderId, $receiverPhone, $amount, $currency, $pin) {
         $receiver = $stmt->fetch();
         if (!$receiver) { throw new Exception("❌ المستلم غير مسجل."); }
         if ($receiver['id'] == $senderId) { throw new Exception("❌ لا يمكن التحويل لنفسك."); }
+        if (!$sender['is_admin']) {
+            $recvUsage = (float)($receiver['current_daily_receive'] ?? 0);
+            $recvLimit = (float)($receiver['daily_receive_limit'] ?? 2000);
+            if ($recvUsage + $amount > $recvLimit) { throw new Exception("❌ المستلم تجاوز سقف الاستقبال اليومي."); }
+        }
         $fee = ($sender['is_admin']) ? 0 : calculateCommission($amount);
         $totalDeduction = $amount + $fee;
         $stmt = $pdo->prepare("SELECT id, balance FROM wallets WHERE user_id = ? AND currency = ? FOR UPDATE");
@@ -85,7 +91,10 @@ function transferFunds($senderId, $receiverPhone, $amount, $currency, $pin) {
         $pdo->prepare("UPDATE wallets SET balance = balance - ? WHERE id = ?")->execute([$totalDeduction, $senderWallet['id']]);
         $pdo->prepare("UPDATE wallets SET balance = balance + ? WHERE id = ?")->execute([$amount, $receiverWallet['id']]);
         $pdo->prepare("INSERT INTO transactions (sender_wallet_id, receiver_wallet_id, amount, fee_amount, type) VALUES (?, ?, ?, ?, 'transfer')")->execute([$senderWallet['id'], $receiverWallet['id'], $amount, $fee]);
-        if (!$sender['is_admin']) { $pdo->prepare("UPDATE users SET current_daily_usage = current_daily_usage + ? WHERE id = ?")->execute([$amount, $senderId]); }
+        if (!$sender['is_admin']) {
+            $pdo->prepare("UPDATE users SET current_daily_usage = current_daily_usage + ? WHERE id = ?")->execute([$amount, $senderId]);
+            $pdo->prepare("UPDATE users SET current_daily_receive = current_daily_receive + ? WHERE id = ?")->execute([$amount, $receiver['id']]);
+        }
         notifyUser($senderId, "تم تحويل $amount $currency إلى $receiverPhone", 'transaction');
         notifyUser($receiver['id'], "وصلتك حوالة بمبلغ $amount $currency من " . $sender['phone'], 'transaction');
         $pdo->commit(); return true;
