@@ -245,6 +245,37 @@ $pendingKyc = $pendingKycStmt->fetchAll();
                             <div style="display:flex; gap:10px;">
                                 <a href="<?php echo htmlspecialchars($k['id_image_path']); ?>" target="_blank" class="btn" style="width:auto; padding:8px 12px; background:#2c2c2e;">صورة الهوية</a>
                                 <a href="<?php echo htmlspecialchars($k['selfie_image_path']); ?>" target="_blank" class="btn" style="width:auto; padding:8px 12px; background:#2c2c2e;">السيلفي</a>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <form method="POST" style="display: inline-flex; gap: 5px;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <input type="number" name="limit" value="<?php echo $u['daily_limit']; ?>" style="width: 80px; padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff;">
+                                    <button type="submit" name="action" value="set_limit" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-blue);">تعديل</button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <?php if ($u['is_frozen']): ?>
+                                        <button type="submit" name="action" value="unfreeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-green);">فك التجميد</button>
+                                    <?php else: ?>
+                                        <button type="submit" name="action" value="freeze" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: var(--ios-red);">تجميد</button>
+                                    <?php endif; ?>
+                                </form>
+                                <form method="POST" style="display: inline-flex; gap: 5px;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <input type="text" name="warning_msg" placeholder="نص التحذير..." style="padding: 8px; border-radius: 8px; border: none; background: #2c2c2e; color: #fff; width: 150px;">
+                                    <button type="submit" name="action" value="send_warning" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #5856D6;"><i class="fa fa-triangle-exclamation"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="toggle_admin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #0A84FF;"><?php echo !empty($u['is_admin']) ? 'سحب أدمن' : 'منح أدمن'; ?></button>
+                                </form>
+                                <form method="POST" style="display: inline-flex; gap: 5px;" onsubmit="return confirm('هل أنت متأكد من إعادة تعيين PIN لـ 1234؟')">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="reset_pin" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #FF9500;"><i class="fa fa-key"></i></button>
+                                </form>
+                                <form method="POST" style="display: inline;" onsubmit="return confirm('سيتم حذف المستخدم وكافة بياناته، متابعة؟')">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" name="action" value="delete_user" class="btn" style="padding: 8px 12px; font-size: 0.8rem; background: #8E8E93;">حذف</button>
+                                </form>
                             </div>
                         </div>
                         <form method="POST" style="width:100%; display:flex; gap:10px; flex-wrap:wrap;">
@@ -271,6 +302,25 @@ $pendingKyc = $pendingKycStmt->fetchAll();
                         <button type="submit" class="btn" style="width:auto; background:#5856D6; padding:10px 14px;">إرسال</button>
                     </form>
                 </div>
+
+                <h3 class="ios-list-header" style="margin-top:2rem;">إدارة المدن (CRUD)</h3>
+                <div class="glass-card">
+                    <?php foreach ($availableCities as $city): ?>
+                    <form method="POST" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="hidden" name="old_city" value="<?php echo htmlspecialchars($city); ?>">
+                        <input type="text" name="city_name" value="<?php echo htmlspecialchars($city); ?>" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="update" class="btn" style="width:auto; background:#0A84FF; padding:10px 14px;">تعديل</button>
+                        <button type="submit" name="crud" value="delete" class="btn" style="width:auto; background:#FF3B30; padding:10px 14px;">حذف</button>
+                    </form>
+                    <?php endforeach; ?>
+                    <form method="POST" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                        <input type="hidden" name="entity" value="city">
+                        <input type="text" name="city_name" placeholder="إضافة مدينة جديدة" class="form-input" style="margin-bottom:0; flex:1; min-width:180px;">
+                        <button type="submit" name="crud" value="create" class="btn" style="width:auto; background:#34C759; padding:10px 14px;">إضافة</button>
+                    </form>
+                </div>
+
 
                 <h3 class="ios-list-header" style="margin-top:2rem;">إدارة المدن (CRUD)</h3>
                 <div class="glass-card">
